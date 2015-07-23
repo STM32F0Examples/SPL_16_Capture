@@ -3,7 +3,7 @@
  * Auto generated Run-Time-Environment Component Configuration File
  *      *** Do not modify ! ***
  *
- * Project: 'SPL_02_External_Interrupt_STM32F0' 
+ * Project: 'SPL_14_Counter_STM32F0' 
  * Target:  'Target 1' 
  */
 
