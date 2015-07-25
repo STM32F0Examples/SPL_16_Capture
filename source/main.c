@@ -10,7 +10,7 @@ void setToMaxSpeed(void);
  * Also enables the update interrupt for this timer
  * @param upToValue number of counts to issue and iterrupt
  */
-void timer_2_init(int upToValue);
+void timer_2_capture_init();
 
 /**
  * Initialize Pin B1 as output
@@ -20,10 +20,10 @@ void led_init(void);
 int main(void){
 	setToMaxSpeed();
 	led_init();
-	timer_2_init(5);
+	timer_2_capture_init();
 	while(1){
-		for(int i=0; i<0xFFFFF;i++);
-		GPIO_WriteBit(GPIOA,GPIO_Pin_1,!GPIO_ReadOutputDataBit(GPIOA,GPIO_Pin_1));//toggles led
+		//for(int i=0; i<0xFFFFF;i++);
+		//GPIO_WriteBit(GPIOA,GPIO_Pin_1,!GPIO_ReadOutputDataBit(GPIOA,GPIO_Pin_1));//toggles led
 	}
 }
 
@@ -45,30 +45,49 @@ void setToMaxSpeed(void){
 	}
 }
 
-void timer_2_init(int upToValue){
-	//Configure Pin A0 as TIM2_CH1_ETR
+void timer_2_capture_init(){
+	//Configure Pin A2 as TIM2_CH3
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA,ENABLE);
 	GPIO_InitTypeDef myGPIO;
 	GPIO_StructInit(&myGPIO);
-	myGPIO.GPIO_Pin=GPIO_Pin_0;
+	myGPIO.GPIO_Pin=GPIO_Pin_2;
 	myGPIO.GPIO_Mode=GPIO_Mode_AF;
 	myGPIO.GPIO_PuPd=GPIO_PuPd_UP;
 	GPIO_Init(GPIOA,&myGPIO);
-	GPIO_PinAFConfig(GPIOA,GPIO_PinSource0,GPIO_AF_2);
+	GPIO_PinAFConfig(GPIOA,GPIO_PinSource2,GPIO_AF_2);
 	
+	//time base configuration
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2,ENABLE);
 	TIM_TimeBaseInitTypeDef myTimer;
 	TIM_TimeBaseStructInit(&myTimer);
 	myTimer.TIM_CounterMode=TIM_CounterMode_Down;
-	myTimer.TIM_Prescaler=(0);
+	myTimer.TIM_Prescaler=(48);//microsecond count
 	myTimer.TIM_ClockDivision=TIM_CKD_DIV1;
-	myTimer.TIM_Period=(upToValue-1);
+	myTimer.TIM_Period=(10000);//10 ms interrupt
 	TIM_TimeBaseInit(TIM2,&myTimer);
-	TIM_ETRClockMode2Config(TIM2,TIM_ExtTRGPSC_OFF,TIM_ExtTRGPolarity_NonInverted,0);
+	TIM_InternalClockConfig(TIM2);
+	
+	//capture channel 3  configuration
+	TIM_ICInitTypeDef myCapture;
+	TIM_ICStructInit(&myCapture);
+	myCapture.TIM_Channel=TIM_Channel_3;
+	myCapture.TIM_ICFilter=0xF;//no filter
+	myCapture.TIM_ICPolarity=TIM_ICPolarity_Rising;
+	myCapture.TIM_ICPrescaler=TIM_ICPSC_DIV1;
+	myCapture.TIM_ICSelection=TIM_ICSelection_DirectTI;
+	TIM_ICInit(TIM2,&myCapture);
+	
+	
+	
+	//Interrupt configuration
 	TIM_ITConfig(TIM2,TIM_IT_Update,ENABLE);
+	TIM_ITConfig(TIM2,TIM_IT_CC3,ENABLE);
 	NVIC_EnableIRQ(TIM2_IRQn);
 	
+	//start timer
 	TIM_Cmd(TIM2,ENABLE);
+	//start capture
+	TIM_CCxCmd(TIM2,TIM_Channel_3,ENABLE);
 }
 
 void led_init(void){
@@ -84,8 +103,20 @@ void led_init(void){
 	GPIO_ResetBits(GPIOA,GPIO_Pin_1);
 }
 
+int update_counter;
+int capture_counter;
+int capture_val;
+
 void TIM2_IRQHandler(void){
-	TIM_ClearITPendingBit(TIM2,TIM_IT_Update);
-	GPIO_WriteBit(GPIOB,GPIO_Pin_1,!GPIO_ReadOutputDataBit(GPIOB,GPIO_Pin_1));//toggles led
+	if(TIM_GetITStatus(TIM2,TIM_IT_Update)){
+		TIM_ClearITPendingBit(TIM2,TIM_IT_Update);
+		//GPIO_WriteBit(GPIOB,GPIO_Pin_1,!GPIO_ReadOutputDataBit(GPIOB,GPIO_Pin_1));//toggles led
+		update_counter++;
+	}
+	if(TIM_GetITStatus(TIM2,TIM_IT_CC3)){
+		TIM_ClearITPendingBit(TIM2,TIM_IT_CC3);
+		capture_val=TIM_GetCapture3(TIM2);
+		capture_counter++;
+	}
 }
 
